@@ -106,3 +106,4 @@ build/
 *.out
 target/
 vendor/
+.run/

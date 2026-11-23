@@ -1,13 +1,26 @@
 spring:
   application:
     name: ollama-reactive-agent
+  # Ollama generations (incl. the validator's judge call) can take minutes on
+  # qwen3:8b; raise the blocking HTTP client read timeout accordingly.
+  http:
+    client:
+      read-timeout: 300s
+      connect-timeout: 30s
   ai:
     ollama:
       base-url: ${OLLAMA_URL:http://localhost:11434}
       chat:
         options:
-          model: ${OLLAMA_MODEL:qwen3:4b}
+          model: ${OLLAMA_MODEL:qwen3:8b}
           temperature: 0.2
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    admin:
+      fail-fast: false
 
 server:
   port: ${PORT:8082}
@@ -15,3 +28,29 @@ server:
 agent:
   project-root: ${AGENT_PROJECT_ROOT:..}
   rag-api-url: ${RAG_API_URL:http://localhost:8080/api/v1/rag/agent/ask}
+
+# Web fallback + learning pipeline (producer side).
+# Default provider "wikipedia" is keyless and free. Switch to tavily
+# (WEB_SEARCH_PROVIDER=tavily) only if you set TAVILY_API_KEY.
+web-search:
+  enabled: ${WEB_SEARCH_ENABLED:true}
+  provider: ${WEB_SEARCH_PROVIDER:wikipedia}
+  api-key: ${TAVILY_API_KEY:}
+  base-url: ${WEB_SEARCH_URL:https://api.tavily.com/search}
+  max-results: 4
+  validate-rag-completeness: ${VALIDATE_RAG_COMPLETENESS:true}
+
+learning:
+  topic: ${LEARNING_TOPIC:learned-answers}
+  unanswered-topic: ${LEARNING_UNANSWERED_TOPIC:unanswered-queries}
+  # How the answer is produced when the book cannot answer:
+  #   llm  -> generate from the local model (qwen3:8b), fully offline (default)
+  #   web  -> search the web (Wikipedia/Tavily) and validate, per web-search.*
+  answer-source: ${LEARNING_ANSWER_SOURCE:llm}
+
+# Logging for the web-fallback + learning pipeline. Set local.agent to DEBUG to
+# see the validator's raw model output and per-step verdicts.
+logging:
+  level:
+    local.agent: INFO
+    org.springframework.kafka: WARN

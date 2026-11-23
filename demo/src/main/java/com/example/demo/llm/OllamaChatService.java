@@ -15,7 +15,7 @@ public class OllamaChatService {
     private static final String API_URL =
             "http://localhost:11434/api/chat";
 
-    private static final String MODEL = "qwen3:4b";
+    private static final String MODEL = "qwen3:8b";
 
     private final HttpClient httpClient =
             HttpClient.newHttpClient();

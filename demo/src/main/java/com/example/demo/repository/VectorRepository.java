@@ -1,6 +1,8 @@
 package com.example.demo.repository;
 
 import com.example.demo.query.SearchResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -8,6 +10,8 @@ import java.util.List;
 
 @Repository
 public class VectorRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(VectorRepository.class);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -60,6 +64,48 @@ public class VectorRepository {
                 vectorString,
                 limit
         );
+    }
+
+
+    /**
+     * Highest cosine similarity between the given embedding and anything
+     * already stored. Used to skip re-learning an answer we already have.
+     * Returns 0.0 when the table is empty.
+     */
+    public double maxSimilarity(double[] embedding) {
+        String sql = """
+                SELECT MAX(1 - (embedding <=> CAST(? AS vector))) AS sim
+                FROM document_chunks
+                """;
+        Double sim = jdbcTemplate.queryForObject(
+                sql, Double.class, toVectorString(embedding));
+        double result = sim == null ? 0.0 : sim;
+        log.debug("maxSimilarity={}", result);
+        return result;
+    }
+
+    /** Insert one learned chunk into the same table the book chunks live in. */
+    public void insertChunk(
+            String documentName,
+            int pageNumber,
+            int chunkNumber,
+            String content,
+            double[] embedding
+    ) {
+        String sql = """
+                INSERT INTO document_chunks
+                    (document_name, page_number, chunk_number, content, embedding)
+                VALUES (?, ?, ?, ?, ?::vector)
+                """;
+        jdbcTemplate.update(
+                sql,
+                documentName,
+                pageNumber,
+                chunkNumber,
+                content,
+                toVectorString(embedding));
+        log.debug("Inserted learned chunk documentName={} chunkNumber={} chars={}",
+                documentName, chunkNumber, content.length());
     }
 
     private String toVectorString(double[] embedding) {

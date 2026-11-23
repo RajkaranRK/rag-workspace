@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 MAX_FILE_BYTES = 40_000
 
 TOOLS = [

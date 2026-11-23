@@ -17,33 +17,47 @@ public class DocumentChunker {
         int chunkNumber = 1;
 
         for (PdfDocumentReader.PageContent page : pages) {
-
-            String text = page.text();
-
-            int start = 0;
-
-            while (start < text.length()) {
-
-                int end = Math.min(
-                        start + CHUNK_SIZE,
-                        text.length()
-                );
-
-                String content = text.substring(start, end);
-
+            for (String content : splitText(page.text())) {
                 chunks.add(new DocumentChunk(
                         documentName,
                         page.pageNumber(),
                         chunkNumber++,
                         content
                 ));
-
-                if (end == text.length()) {
-                    break;
-                }
-
-                start = end - OVERLAP;
             }
+        }
+
+        return chunks;
+    }
+
+    /**
+     * The single chunking rule used across the app: fixed-size windows of
+     * CHUNK_SIZE characters with OVERLAP characters repeated between adjacent
+     * windows. Both PDF ingestion and learned-answer ingestion use this so the
+     * two paths stay identical.
+     */
+    public List<String> splitText(String text) {
+
+        List<String> chunks = new ArrayList<>();
+
+        if (text == null || text.isEmpty()) {
+            return chunks;
+        }
+
+        int start = 0;
+        int length = text.length();
+
+        while (start < length) {
+
+            int end = Math.min(start + CHUNK_SIZE, length);
+
+            chunks.add(text.substring(start, end));
+
+            if (end == length) {
+                break;
+            }
+
+            start = end - OVERLAP;
         }
 
         return chunks;

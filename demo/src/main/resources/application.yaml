@@ -8,6 +8,21 @@ spring:
     password: ragpassword
     driver-class-name: org.postgresql.Driver
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer:
+      group-id: rag-learned-ingest
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      missing-topics-fatal: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    admin:
+      fail-fast: false
+
 server:
   port: 8080
 
@@ -15,7 +30,7 @@ rag:
   ollama:
     base-url: http://localhost:11434
     embedding-model: nomic-embed-text
-    chat-model: qwen3:4b
+    chat-model: qwen3:8b
   reranker:
     base-url: http://localhost:8001
   retrieval:
@@ -23,3 +38,19 @@ rag:
     final-top-k: 3
     similarity-threshold: 0.70
     embedding-dimensions: 768
+
+# Learned-answers pipeline (Kafka consumer -> vector store)
+learning:
+  topic: learned-answers
+  unanswered-topic: unanswered-queries
+  document-name: web-learned
+  dedup-threshold: 0.97
+
+# Logging for the learned-answers pipeline. Raise a line to DEBUG for detail
+# (e.g. per-chunk embedding/insert logs from the repository).
+logging:
+  level:
+    com.example.demo.learning: INFO
+    com.example.demo.repository.VectorRepository: INFO
+    com.example.demo.service.EmbeddingService: INFO
+    org.springframework.kafka: WARN

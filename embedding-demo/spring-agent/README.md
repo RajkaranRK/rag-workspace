@@ -12,7 +12,7 @@ This Java version mirrors the Python starter: Ollama is the brain, Spring AI con
 Pull the model once:
 
 ```bash
-ollama pull qwen3:4b
+ollama pull qwen3:8b
 ```
 
 Ollama tool calling requires Ollama 0.2.8 or later; streaming tool calls require Ollama 0.4.6 or later.
@@ -25,10 +25,10 @@ From this `spring-agent` directory:
 mvn spring-boot:run
 ```
 
-The server listens on port `8082` by default, uses Ollama at `http://localhost:11434`, and selects model `qwen3:4b`. Override them with environment variables:
+The server listens on port `8082` by default, uses Ollama at `http://localhost:11434`, and selects model `qwen3:8b`. Override them with environment variables:
 
 ```bash
-PORT=8082 OLLAMA_URL=http://localhost:11434 OLLAMA_MODEL=qwen3:4b mvn spring-boot:run
+PORT=8082 OLLAMA_URL=http://localhost:11434 OLLAMA_MODEL=qwen3:8b mvn spring-boot:run
 ```
 
 The tools use the parent workspace as their project root by default. Set `AGENT_PROJECT_ROOT` to point to another directory.

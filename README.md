@@ -7,10 +7,11 @@ A local, fully offline **Retrieval-Augmented Generation (RAG)** workspace. It le
 | Folder | Tech | Port | Use case |
 |---|---|---|---|
 | [`postgres/`](postgres) | Docker Compose, PostgreSQL 16 + pgvector | 5432 | Vector database that stores book chunks and their embeddings |
+| [`kafka/`](kafka) | Docker Compose, Apache Kafka 3.9 (KRaft) | 9092 | Event bus for the self-learning pipeline (topic `learned-answers`) |
 | [`demo/`](demo) | Java 17, Spring Boot 3.2, PDFBox, JDBC | 8080 | **The core RAG application**: ingestion, vector search, reranking, answer generation, evaluation, bounded agentic RAG |
 | [`reranker-service/`](reranker-service) | Python, FastAPI, sentence-transformers | 8001 (set at start) | Second-stage reranker that reorders search results with `BAAI/bge-reranker-v2-m3` |
 | [`embedding-demo/`](embedding-demo) | Python (stdlib), Ollama | n/a (CLI) | Starter local tool-using agent in the terminal (list/read project files) |
-| [`embedding-demo/spring-agent/`](embedding-demo/spring-agent) | Java 17, Spring Boot 3.5, Spring AI 1.1, WebFlux | 8082 | HTTP chat agent that can read project files and call the RAG API as a tool |
+| [`embedding-demo/spring-agent/`](embedding-demo/spring-agent) | Java 17, Spring Boot 3.5, Spring AI 1.1, WebFlux | 8082 | HTTP chat agent; reads project files, calls the RAG API, and runs the **web-fallback + learning producer** |
 | [`documents/`](documents) | PDF | n/a | Source material (the system design book, ~23 MB) |
 
 ## How the pieces fit together
@@ -29,13 +30,13 @@ A local, fully offline **Retrieval-Augmented Generation (RAG)** workspace. It le
                                    ▼
                  reranker-service /rerank  (keep final top 3)
                                    ▼
-                 Ollama qwen3:4b writes answer + sources
+                 Ollama qwen3:8b writes answer + sources
 
  question ─► spring-agent :8082 ─► (Qwen decides) ─► demo /api/v1/rag/agent/ask
                                               └──► ProjectTools (list/read local files)
 ```
 
-External requirement for everything: **[Ollama](https://ollama.com)** running on `localhost:11434` with `nomic-embed-text` (768-dim embeddings) and `qwen3:4b` (answers and agent tool calling).
+External requirement for everything: **[Ollama](https://ollama.com)** running on `localhost:11434` with `nomic-embed-text` (768-dim embeddings) and `qwen3:8b` (answers and agent tool calling).
 
 ---
 
@@ -111,7 +112,7 @@ uvicorn app:app --host 0.0.0.0 --port 8001
 ## 4. `embedding-demo/` — local agent starters
 
 ### Python CLI agent (`agent.py`)
-Standard-library-only terminal chat with Ollama (`qwen3:4b` by default; override with `OLLAMA_MODEL` / `OLLAMA_URL`). Tools: `list_files` and `read_file`, sandboxed to the folder, 40 KB read limit, max 6 tool rounds per turn. Commands: `/reset`, `/exit`. Use case: learning how tool-calling agents work with no dependencies.
+Standard-library-only terminal chat with Ollama (`qwen3:8b` by default; override with `OLLAMA_MODEL` / `OLLAMA_URL`). Tools: `list_files` and `read_file`, sandboxed to the folder, 40 KB read limit, max 6 tool rounds per turn. Commands: `/reset`, `/exit`. Use case: learning how tool-calling agents work with no dependencies.
 
 ```bash
 cd embedding-demo && python3 agent.py
@@ -138,8 +139,9 @@ curl http://localhost:8082/api/agent/chat -H 'Content-Type: application/json' \
 
 ## Run order for the full stack
 
-1. Start Ollama and pull models: `ollama pull nomic-embed-text && ollama pull qwen3:4b`
-2. `postgres/`: `docker compose up -d`
+1. Start Ollama and pull models: `ollama pull nomic-embed-text && ollama pull qwen3:8b`
+2. `postgres/`: `docker compose up -d`, then load the schema once: `docker exec -i rag-postgres psql -U raguser -d ragdb < postgres/schema.sql`
+2b. `kafka/`: `docker compose up -d` (only needed for the learning pipeline)
 3. `demo/`: run the ingestion once (`FullEmbeddingDemo`) to fill the database, then start the app on 8080
 4. `reranker-service/`: start on port 8001
 5. Optional: start `embedding-demo/spring-agent` on 8082 for the chat agent
@@ -148,4 +150,43 @@ Check the ingestion class and database table setup in `demo/` before step 3; the
 
 ## Prerequisites
 
-Docker, Java 17+, Maven 3.9+, Python 3.10+, Ollama.
+Docker, Java 17+, Maven 3.9+, Python 3.10+, Ollama. The learning pipeline uses a keyless Wikipedia web-search provider by default (no key needed); set `WEB_SEARCH_PROVIDER=tavily` + `TAVILY_API_KEY` for full-web search.
+
+## Self-learning pipeline (two-phase, async)
+
+When a system-design question is **not** answered by the book, nothing is
+generated at request time. The question is recorded; later you call an API to
+generate an answer with the local model (qwen3:8b), which is then embedded and
+stored so the next identical question is served from pgvector.
+
+```
+Phase 1 (automatic):  agent: RAG insufficient ─► Kafka "unanswered-queries"
+                       demo:  consume ─► INSERT unanswered_queries (PENDING)
+
+Phase 2 (you trigger): POST /api/v1/learning/unanswered/{id}/generate
+                       demo:  qwen3:8b answer ─► Kafka "learned-answers"
+                       demo:  consume ─► embed + store in pgvector ─► STORED
+```
+
+```bash
+curl 'localhost:8080/api/v1/learning/unanswered?status=PENDING'      # find id
+curl -X POST localhost:8080/api/v1/learning/unanswered/1/generate     # learn it
+```
+
+Fully offline. Full design, status lifecycle, API and a walkthrough:
+[docs/learning-pipeline.md](docs/learning-pipeline.md).
+
+## Run everything with one script
+
+`run-all.sh` starts, stops and monitors the whole stack (Ollama, Postgres, reranker, demo, spring-agent):
+
+```bash
+./run-all.sh start              # start all, in dependency order, waiting for each port
+./run-all.sh start demo agent   # start only some services
+./run-all.sh status             # which ports are up
+./run-all.sh logs demo          # tail a log (logs and PID files live in .run/)
+./run-all.sh stop               # stop all (Postgres data volume is kept)
+./run-all.sh restart reranker
+```
+
+It reuses anything already running on the same port. It creates the reranker `.venv` on first run and pulls missing Ollama models. It does not ingest the PDF; run the ingestion once before using the RAG API.

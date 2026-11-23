@@ -11,7 +11,7 @@ The reactive Spring AI version is in [spring-agent/README.md](spring-agent/READM
 Install Ollama from [ollama.com/download](https://ollama.com/download), then open a terminal and run:
 
 ```bash
-ollama pull qwen3:4b
+ollama pull qwen3:8b
 ```
 
 Ollama normally starts its local service automatically. If it is not running, start it with:
@@ -32,7 +32,7 @@ Try asking `What files are in this project?` or `Summarize the RAG notes.` Type 
 
 ## Choose another model or Ollama address
 
-The defaults are model `qwen3:4b` and address `http://localhost:11434`. Override them for one run like this:
+The defaults are model `qwen3:8b` and address `http://localhost:11434`. Override them for one run like this:
 
 ```bash
 OLLAMA_MODEL=llama3.2:3b python3 agent.py

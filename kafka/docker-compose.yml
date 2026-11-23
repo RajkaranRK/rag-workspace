@@ -1,0 +1,38 @@
+# Single-node Kafka (KRaft mode, no ZooKeeper) for the learned-answers pipeline.
+# Producer: spring-agent. Consumer: demo (RAG app).
+#
+# Ephemeral by design: no named volume. The broker only carries learned-answer
+# events in transit; the consumer persists them in Postgres/pgvector, so a
+# broker restart at worst means an un-consumed event is re-learned next time.
+services:
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: rag-kafka
+    ports:
+      - "9092:9092"          # host clients connect here
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Bind on all interfaces (empty host); advertise a routable address.
+      # advertised.listeners must NOT be 0.0.0.0 and must exclude CONTROLLER.
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: rag-kraft-cluster-0001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
