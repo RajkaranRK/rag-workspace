@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: rag-application
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ragdb
+    username: raguser
+    password: ragpassword
+    driver-class-name: org.postgresql.Driver
+
+server:
+  port: 8080
+
+rag:
+  ollama:
+    base-url: http://localhost:11434
+    embedding-model: nomic-embed-text
+    chat-model: qwen3:4b
+  reranker:
+    base-url: http://localhost:8001
+  retrieval:
+    top-k: 5
+    final-top-k: 3
+    similarity-threshold: 0.70
+    embedding-dimensions: 768

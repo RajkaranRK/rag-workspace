@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ollama-reactive-agent
+  ai:
+    ollama:
+      base-url: ${OLLAMA_URL:http://localhost:11434}
+      chat:
+        options:
+          model: ${OLLAMA_MODEL:qwen3:4b}
+          temperature: 0.2
+
+server:
+  port: ${PORT:8082}
+
+agent:
+  project-root: ${AGENT_PROJECT_ROOT:..}
+  rag-api-url: ${RAG_API_URL:http://localhost:8080/api/v1/rag/agent/ask}
